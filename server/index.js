@@ -40,7 +40,7 @@ const uploadsDir = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsDir));
 
 // Serve frontend static files in production
-const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+const clientBuildPath = path.join(__dirname, 'built');
 app.use(express.static(clientBuildPath));
 
 // --- Routes ---
