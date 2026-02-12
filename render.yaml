@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: seminar-bwuk
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.0.0
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        fromContext: MONGO_URI
+      - key: JWT_SECRET
+        fromContext: JWT_SECRET
