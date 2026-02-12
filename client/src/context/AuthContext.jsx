@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+const VITE_CLIENT_ORIGIN = import.meta.env.VITE_CLIENT_ORIGIN;
 
 const AuthContext = createContext();
 
 axios.defaults.withCredentials = true;
 const API_BASE = window.location.origin.includes('localhost')
     ? 'http://localhost:5001/api'
-    : '/api';
+    : (VITE_CLIENT_ORIGIN || '') + '/api';
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
