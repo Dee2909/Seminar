@@ -21,10 +21,8 @@ connectDB();
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow any localhost origin
-      if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
-        callback(null, true);
-      } else if (origin === process.env.CLIENT_ORIGIN) {
+      // Allow any localhost origin or the render URL
+      if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) || origin.includes('onrender.com')) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -41,6 +39,10 @@ app.use(morgan('dev'));
 const uploadsDir = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsDir));
 
+// Serve frontend static files in production
+const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+app.use(express.static(clientBuildPath));
+
 // --- Routes ---
 const teamRoutes = require('./routes/team');
 const adminRoutes = require('./routes/admin');
@@ -50,6 +52,11 @@ app.use('/api', adminRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// For SPA - Send index.html for any other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
 // --- Start server ---

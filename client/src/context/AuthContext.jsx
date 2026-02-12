@@ -4,7 +4,9 @@ import axios from 'axios';
 const AuthContext = createContext();
 
 axios.defaults.withCredentials = true;
-const API_BASE = 'http://localhost:5001/api';
+const API_BASE = window.location.origin.includes('localhost')
+    ? 'http://localhost:5001/api'
+    : '/api';
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
