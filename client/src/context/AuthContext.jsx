@@ -5,9 +5,7 @@ const VITE_CLIENT_ORIGIN = import.meta.env.VITE_CLIENT_ORIGIN;
 const AuthContext = createContext();
 
 axios.defaults.withCredentials = true;
-const API_BASE = window.location.origin.includes('localhost')
-    ? 'http://localhost:5001/api'
-    : (VITE_CLIENT_ORIGIN || '') + '/api';
+const API_BASE = `${VITE_CLIENT_ORIGIN}/api`;
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
