@@ -2,8 +2,18 @@
     "name": "seminarcomp-root",
     "version": "1.0.0",
     "scripts": {
-        "install:all": "npm install && cd client && npm install && cd ../server && npm install",
-        "build": "cd client && npm install && npm run build && cd .. && mkdir -p server/built && cp -r client/dist/* server/built/ && cd server && npm install",
-        "start": "cd server && npm start"
+        "build": "cd client && npm install && npm run build && cd .. && mkdir -p server/built && cp -r client/dist/* server/built/",
+        "start": "node server/index.js"
+    },
+    "dependencies": {
+        "bcryptjs": "^2.4.3",
+        "cookie-parser": "^1.4.7",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.21.2",
+        "jsonwebtoken": "^9.0.2",
+        "mongoose": "^8.5.3",
+        "morgan": "^1.10.0",
+        "multer": "^1.4.5-lts.1"
     }
 }
