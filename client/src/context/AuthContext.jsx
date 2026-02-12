@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+.import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
@@ -17,14 +17,26 @@ export const AuthProvider = ({ children }) => {
 
     const checkToken = async () => {
         try {
-            // Try team check
-            const res = await axios.get(`${API_BASE}/team/me`);
-            setUser({ ...res.data, role: 'team' });
+            // Try team check (silently - don't log expected errors)
+            const res = await axios.get(`${API_BASE}/team/me`, {
+                validateStatus: (status) => status === 200 || status === 401 || status === 403
+            });
+            if (res.status === 200) {
+                setUser({ ...res.data, role: 'team' });
+            } else {
+                throw new Error('Not team');
+            }
         } catch (err) {
             try {
-                // Try admin check
-                const resAdmin = await axios.get(`${API_BASE}/admin/me`);
-                setUser({ ...resAdmin.data, role: 'admin' });
+                // Try admin check (silently)
+                const resAdmin = await axios.get(`${API_BASE}/admin/me`, {
+                    validateStatus: (status) => status === 200 || status === 401 || status === 403
+                });
+                if (resAdmin.status === 200) {
+                    setUser({ ...resAdmin.data, role: 'admin' });
+                } else {
+                    setUser(null);
+                }
             } catch (err2) {
                 setUser(null);
             }
