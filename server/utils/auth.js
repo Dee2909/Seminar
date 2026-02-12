@@ -9,15 +9,22 @@ function signToken(payload) {
 
 function setAuthCookie(res, payload) {
   const token = signToken(payload);
+  const isProduction = process.env.NODE_ENV === 'production';
   res.cookie(TOKEN_COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: false // set true if you use HTTPS
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction, // true for HTTPS (production)
+    maxAge: 8 * 60 * 60 * 1000 // 8 hours
   });
 }
 
 function clearAuthCookie(res) {
-  res.clearCookie(TOKEN_COOKIE_NAME);
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie(TOKEN_COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction
+  });
 }
 
 const Team = require('../models/Team');

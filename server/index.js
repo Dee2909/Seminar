@@ -10,13 +10,7 @@ const app = express();
 
 // --- Middleware ---
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) || origin.includes('onrender.com')) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Fallback to allow for testing
-    }
-  },
+  origin: true, // Allow all origins
   credentials: true
 }));
 

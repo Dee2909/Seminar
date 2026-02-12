@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "build": "echo 'No server-side build required'",
-    "dev": "nodemon index.js"
+    "dev": "bun index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
