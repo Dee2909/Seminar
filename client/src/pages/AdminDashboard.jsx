@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, API_BASE } from '../context/AuthContext';
 import {
     Users, FileCode, PlusCircle, CheckCircle,
-    ListChecks, Layers, Clock, ListOrdered, CheckCircle2, BarChart, Code, TestTube, RotateCcw, Trash2
+    ListChecks, Layers, Clock, ListOrdered, CheckCircle2, BarChart, Code, TestTube, RotateCcw, Trash2, FileVideo
 } from 'lucide-react';
 import { getQuizzes, addQuestion as addQuestionSvc, createQuiz as createQuizSvc, updateQuiz as updateQuizSvc, getQuestions as getQuestionsSvc, updateQuestion as updateQuestionSvc, deleteQuestion as deleteQuestionSvc } from '../services/quizService';
 import CodeTerminal from '../components/CodeTerminal';
@@ -498,22 +498,30 @@ const AdminDashboard = () => {
                 <p style={{ color: 'var(--text-muted)' }}>Centralized control for projects, rounds, and question banks.</p>
             </div>
 
-            <div className="flex gap-4 mb-8 border-b border-black/5 pb-2 overflow-x-auto">
-                {[
-                    { id: 'projects', label: 'Projects', icon: FileCode },
-                    { id: 'quizzes', label: 'Manage Quizzes', icon: ListChecks },
-                    { id: 'teams', label: 'Teams', icon: Users },
-                    { id: 'reports', label: 'Project Reports', icon: BarChart }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => { setActiveTab(tab.id); setError(''); setSuccess(''); }}
-                        className={`btn ${activeTab === tab.id ? 'btn-primary' : 'btn-ghost'}`}
-                        style={{ borderRadius: '12px 12px 0 0', padding: '16px 24px', whiteSpace: 'nowrap' }}
-                    >
-                        <tab.icon size={18} style={{ marginRight: 8 }} /> {tab.label}
-                    </button>
-                ))}
+            <div className="flex justify-between items-end mb-8 border-b border-black/5 pb-0">
+                <div className="flex gap-4 overflow-x-auto">
+                    {[
+                        { id: 'projects', label: 'Projects', icon: FileCode },
+                        { id: 'quizzes', label: 'Manage Quizzes', icon: ListChecks },
+                        { id: 'teams', label: 'Teams', icon: Users },
+                        { id: 'reports', label: 'Project Reports', icon: BarChart }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => { setActiveTab(tab.id); setError(''); setSuccess(''); }}
+                            className={`btn ${activeTab === tab.id ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ borderRadius: '12px 12px 0 0', padding: '16px 24px', whiteSpace: 'nowrap' }}
+                        >
+                            <tab.icon size={18} style={{ marginRight: 8 }} /> {tab.label}
+                        </button>
+                    ))}
+                </div>
+                <button
+                    onClick={() => navigate('/admin/recordings')}
+                    className="btn btn-ghost gap-2 text-primary mb-2"
+                >
+                    <FileVideo size={18} /> Cloud Recordings
+                </button>
             </div>
 
             {error && <div className="animate-in" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', padding: 12, borderRadius: 8, marginBottom: 20 }}>{error}</div>}

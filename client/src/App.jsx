@@ -10,6 +10,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import QuizPage from './pages/QuizPage';
 import ProjectWorkspace from './pages/ProjectWorkspace';
 import TeamStats from './pages/TeamStats';
+import RecordingsGallery from './pages/RecordingsGallery';
 import Leaderboard from './pages/Leaderboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Logo from './components/Logo';
@@ -86,6 +87,7 @@ function App() {
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/team-stats/:id" element={<TeamStats />} />
+              <Route path="/admin/recordings" element={<RecordingsGallery />} />
               <Route path="/project-workspace/:id" element={<ProjectWorkspace />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
             </Routes>

@@ -615,4 +615,28 @@ router.post('/admin/project-reports/:teamId/retest', authAdmin, async (req, res)
     res.status(500).json({ message: 'Server error: ' + err.message });
   }
 });
+// GET /api/admin/gridfs-files - List all files in GridFS
+router.get('/admin/gridfs-files', authAdmin, async (req, res) => {
+  try {
+    const gfs = req.app.locals.gfs;
+    if (!gfs) return res.status(500).json({ message: 'GridFS not initialized' });
+
+    const files = await gfs.find({}).sort({ uploadDate: -1 }).toArray();
+
+    const formattedFiles = files.map(file => ({
+      _id: file._id,
+      filename: file.filename,
+      contentType: file.contentType,
+      length: file.length,
+      sizeMB: (file.length / (1024 * 1024)).toFixed(2),
+      uploadDate: file.uploadDate
+    }));
+
+    res.json(formattedFiles);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error fetching files' });
+  }
+});
+
 module.exports = router;
