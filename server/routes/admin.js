@@ -17,7 +17,28 @@ const router = express.Router();
 // --- Multer Setup for Project PDFs ---
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Helper to upload a file to GridFS
+async function uploadToGridFS(filename, req) {
+  const gfs = req.app.locals.gfs;
+  if (!gfs) return console.error('GridFS not initialized');
+
+  const filePath = path.join(uploadsDir, filename);
+  if (!fs.existsSync(filePath)) return;
+
+  const uploadStream = gfs.openUploadStream(filename);
+  const readStream = fs.createReadStream(filePath);
+
+  return new Promise((resolve, reject) => {
+    readStream.pipe(uploadStream)
+      .on('error', reject)
+      .on('finish', () => {
+        console.log(`📦 File synced to MongoDB Cloud: ${filename}`);
+        resolve();
+      });
+  });
 }
 
 const storage = multer.diskStorage({
@@ -53,6 +74,11 @@ router.post('/admin/projects', authAdmin, uploadProject.single('file'), async (r
       pdf_file: req.file ? req.file.filename : ''
     });
     await project.save();
+
+    // Sync to GridFS
+    if (req.file) {
+      uploadToGridFS(req.file.filename, req).catch(err => console.error('GridFS sync failed:', err));
+    }
 
     // Create Test Cases if any
     if (testCases) {

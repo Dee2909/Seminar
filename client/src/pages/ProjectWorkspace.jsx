@@ -161,8 +161,10 @@ const ProjectWorkspace = () => {
             await axios.post(`${API_BASE}/team/upload`, formData);
             navigate('/dashboard');
         } catch (err) {
-            console.error(err);
-            navigate('/dashboard');
+            console.error('Upload Error:', err);
+            const errorMsg = err.response?.data?.message || err.message || 'Unknown upload error';
+            alert(`Submission Failed: ${errorMsg}\n\nPlease check your internet connection or file size.`);
+            setSubmitting(false); // Don't navigate away so they can retry
         }
     };
 

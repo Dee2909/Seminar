@@ -14,6 +14,35 @@ const { setAuthCookie, clearAuthCookie, authTeam, authAny } = require('../utils/
 
 const router = express.Router();
 
+// --- File upload setup ---
+const uploadsDir = path.resolve(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  console.log('📁 Creating uploads directory (routes):', uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+console.log('✅ Multer configured to save in:', uploadsDir);
+
+// Helper to upload a file to GridFS
+async function uploadToGridFS(filename, req) {
+  const gfs = req.app.locals.gfs;
+  if (!gfs) return console.error('GridFS not initialized');
+
+  const filePath = path.join(uploadsDir, filename);
+  if (!fs.existsSync(filePath)) return;
+
+  const uploadStream = gfs.openUploadStream(filename);
+  const readStream = fs.createReadStream(filePath);
+
+  return new Promise((resolve, reject) => {
+    readStream.pipe(uploadStream)
+      .on('error', reject)
+      .on('finish', () => {
+        console.log(`📦 File synced to MongoDB Cloud: ${filename}`);
+        resolve();
+      });
+  });
+}
+
 // Helper function to run code with input
 function runCodeWithInput(code, language, input) {
   return new Promise((resolve, reject) => {
@@ -74,14 +103,6 @@ router.get('/team/project-config', authTeam, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-
-// --- File upload setup ---
-const uploadsDir = path.resolve(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  console.log('📁 Creating uploads directory (routes):', uploadsDir);
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-console.log('✅ Multer configured to save in:', uploadsDir);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -282,6 +303,11 @@ router.post('/team/quiz', authTeam, upload.single('recording'), async (req, res)
     team.recalculateFinalScore();
     await team.save();
 
+    // Sync to GridFS in background
+    if (req.file) {
+      uploadToGridFS(req.file.filename, req).catch(err => console.error('GridFS sync failed:', err));
+    }
+
     res.json({ message: 'Quiz result saved', final_score: team.final_score });
   } catch (err) {
     console.error(err);
@@ -328,6 +354,12 @@ router.post('/team/upload', authTeam, upload.fields([{ name: 'file', maxCount: 1
 
     team.recalculateFinalScore();
     await team.save();
+
+    // Sync to GridFS in background
+    uploadToGridFS(sourceFile.filename, req).catch(err => console.error('Disk sync failed:', err));
+    if (recordingFile) {
+      uploadToGridFS(recordingFile.filename, req).catch(err => console.error('GridFS sync failed:', err));
+    }
 
     res.json({ message: 'File uploaded', file_name: sourceFile.filename });
   } catch (err) {
@@ -482,6 +514,9 @@ router.post('/team/submit-with-tests', authTeam, upload.single('file'), async (r
 
     team.recalculateFinalScore();
     await team.save();
+
+    // Sync to GridFS
+    uploadToGridFS(req.file.filename, req).catch(err => console.error('GridFS sync failed:', err));
 
     res.json({
       message: 'Code submitted and tested',
