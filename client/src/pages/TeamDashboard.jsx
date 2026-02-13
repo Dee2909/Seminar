@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuth, API_BASE } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Circle, Upload, Timer, Trophy, Code2, Layers } from 'lucide-react';
+import { CheckCircle2, Circle, Timer, Trophy, Code2, Layers } from 'lucide-react';
 
 const DashboardCard = ({ title, status, score, actionLabel, onAction, icon: Icon, disabled, subtitle }) => (
     <motion.div
@@ -43,7 +43,7 @@ const TeamDashboard = () => {
 
     useEffect(() => {
         if (!user || user.role !== 'team') {
-            navigate('/team/login');
+            navigate('/');
             return;
         }
         loadDashboardData();
@@ -64,14 +64,7 @@ const TeamDashboard = () => {
         }
     };
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const formData = new FormData();
-        formData.append('file', file);
-        await axios.post(`${API_BASE}/team/upload`, formData);
-        loadDashboardData();
-    };
+
 
     if (!team) return <div>Loading...</div>;
 
@@ -153,21 +146,17 @@ const TeamDashboard = () => {
                         <motion.div className="glass-panel" style={{ padding: '30px', display: 'flex', flexDirection: 'column', gap: '15px', border: '1px solid var(--accent)' }}>
                             <div className="flex justify-between items-start">
                                 <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '10px', borderRadius: '10px', color: 'var(--accent)' }}>
-                                    <Upload size={24} />
+                                    <CheckCircle2 size={24} />
                                 </div>
                                 <CheckCircle2 color="var(--accent)" />
                             </div>
                             <div>
-                                <h3 style={{ fontSize: '1.3rem' }}>Project: {team.project.file_name}</h3>
+                                <h3 style={{ fontSize: '1.3rem' }}>Project Submitted</h3>
                                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>Submission received successfully</p>
                             </div>
                             <p style={{ fontSize: '1.1rem', fontWeight: 700 }}>
                                 {team.project.score > 0 ? `Score: ${team.project.score}` : 'Pending Evaluation'}
                             </p>
-                            <label className="btn btn-ghost" style={{ width: '100%', cursor: 'pointer', marginTop: 'auto' }}>
-                                <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-                                Update Submission
-                            </label>
                         </motion.div>
                     )}
 
@@ -179,20 +168,7 @@ const TeamDashboard = () => {
                 </div>
             </div>
 
-            {/* Project Upload Section (only if not submitted) */}
-            {!team.project.submitted && (
-                <div style={{ maxWidth: '600px', margin: '0 auto 60px' }}>
-                    <motion.div className="glass-panel" style={{ padding: '40px', textAlign: 'center' }}>
-                        <Upload size={40} color="var(--primary)" style={{ margin: '0 auto 20px' }} />
-                        <h3 style={{ marginBottom: '10px' }}>Ready to submit your project?</h3>
-                        <p style={{ color: 'var(--text-muted)', marginBottom: '25px' }}>Upload your final source code or ZIP file here.</p>
-                        <label className="btn btn-primary" style={{ width: '100%', cursor: 'pointer', padding: '15px' }}>
-                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-                            Select File to Upload
-                        </label>
-                    </motion.div>
-                </div>
-            )}
+
         </div>
     );
 };

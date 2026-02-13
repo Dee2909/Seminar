@@ -4,9 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, API_BASE } from '../context/AuthContext';
 import {
     Users, FileCode, PlusCircle, CheckCircle,
-    ListChecks, Layers, Clock, ListOrdered, CheckCircle2
+    ListChecks, Layers, Clock, ListOrdered, CheckCircle2, BarChart, Code, TestTube, RotateCcw, Trash2
 } from 'lucide-react';
 import { getQuizzes, addQuestion as addQuestionSvc, createQuiz as createQuizSvc } from '../services/quizService';
+import CodeTerminal from '../components/CodeTerminal';
+import { io } from 'socket.io-client';
+import { useRef } from 'react';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -44,18 +47,55 @@ const AdminDashboard = () => {
 
     const [projects, setProjects] = useState([]);
     const [projectForm, setProjectForm] = useState({ title: '', timeLimit: 60, description: '' });
+    const [newTestCases, setNewTestCases] = useState([]); // Manage test cases during creation
     const [projectFile, setProjectFile] = useState(null);
+    const [projectReports, setProjectReports] = useState([]);
+    const [selectedProjectForTests, setSelectedProjectForTests] = useState('');
+    const [testCases, setTestCases] = useState([]);
+    const [testCaseForm, setTestCaseForm] = useState({ input: '', expectedOutput: '', points: 10, isHidden: false, description: '' });
+    const [viewCode, setViewCode] = useState(null); // { code: '', language: '', teamName: '' }
+    const [isRunning, setIsRunning] = useState(false);
+
+    // --- State for New Team ---
+    const [teamForm, setTeamForm] = useState({ team_name: '', password: '', members: [''] });
+    const [showTeamModal, setShowTeamModal] = useState(false);
+
+    // Terminal & Socket Refs for Admin
+    const adminTerminalRef = useRef(null);
+    const adminSocketRef = useRef(null);
+
+    // --- Admin Socket Setup ---
+    useEffect(() => {
+        const socket = io(API_BASE.replace('/api', ''), {
+            withCredentials: true
+        });
+        adminSocketRef.current = socket;
+
+        socket.on('output', (data) => {
+            adminTerminalRef.current?.write(data);
+        });
+
+        socket.on('finished', () => {
+            setIsRunning(false);
+            adminTerminalRef.current?.writeln('\r\n\x1b[33m--- Execution Finished ---\x1b[0m\r\n');
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, []);
 
     const { user } = useAuth();
 
     useEffect(() => {
         if (!user || user.role !== 'admin') {
-            navigate('/admin/login');
+            navigate('/');
             return;
         }
         fetchTeams();
         loadQuizzes();
         fetchProjects();
+        fetchProjectReports();
     }, [user, navigate]);
 
     const fetchProjects = async () => {
@@ -73,6 +113,7 @@ const AdminDashboard = () => {
         formData.append('title', projectForm.title);
         formData.append('timeLimit', projectForm.timeLimit);
         formData.append('description', projectForm.description);
+        formData.append('testCases', JSON.stringify(newTestCases)); // Send test cases
         if (projectFile) formData.append('file', projectFile);
 
         try {
@@ -81,6 +122,7 @@ const AdminDashboard = () => {
             setSuccess('Project added successfully!');
             setProjectForm({ title: '', timeLimit: 60, description: '' });
             setProjectFile(null);
+            setNewTestCases([]); // Reset test cases
             fetchProjects();
         } catch (err) {
             setError('Failed to add project');
@@ -102,6 +144,42 @@ const AdminDashboard = () => {
         } catch (err) {
             console.error('Failed to load teams', err);
         }
+    };
+
+    const handleCreateTeam = async (e) => {
+        e.preventDefault();
+        setError(''); setSuccess('');
+        try {
+            setLoading(true);
+            const members = teamForm.members.filter(m => m.trim() !== '');
+            if (!teamForm.team_name || !teamForm.password || members.length === 0) {
+                return setError('Team name, password and at least one member are required.');
+            }
+            await axios.post(`${API_BASE}/admin/teams`, { ...teamForm, members });
+            setSuccess('Team created successfully!');
+            setTeamForm({ team_name: '', password: '', members: [''] });
+            setShowTeamModal(false);
+            fetchTeams();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to create team');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleMemberChange = (index, value) => {
+        const newMembers = [...teamForm.members];
+        newMembers[index] = value;
+        setTeamForm({ ...teamForm, members: newMembers });
+    };
+
+    const addMemberField = () => {
+        setTeamForm({ ...teamForm, members: [...teamForm.members, ''] });
+    };
+
+    const removeMemberField = (index) => {
+        const newMembers = teamForm.members.filter((_, i) => i !== index);
+        setTeamForm({ ...teamForm, members: newMembers });
     };
     const handleDeleteTeam = async (id) => {
         if (!window.confirm('Remove this team permanently?')) return;
@@ -231,6 +309,98 @@ const AdminDashboard = () => {
         }
     };
 
+    // --- Project Reports Functions ---
+    const fetchProjectReports = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/admin/project-reports`);
+            setProjectReports(res.data);
+        } catch (err) {
+            console.error('Failed to load project reports', err);
+        }
+    };
+
+    const fetchTestCases = async (projectId) => {
+        try {
+            const res = await axios.get(`${API_BASE}/admin/projects/${projectId}/testcases`);
+            setTestCases(res.data);
+        } catch (err) {
+            console.error('Failed to load test cases', err);
+        }
+    };
+
+    const handleAddTestCase = async (e) => {
+        e.preventDefault();
+        if (!selectedProjectForTests) {
+            setError('Please select a project first');
+            return;
+        }
+        try {
+            setLoading(true);
+            await axios.post(`${API_BASE}/admin/projects/${selectedProjectForTests}/testcases`, testCaseForm);
+            setSuccess('Test case added successfully!');
+            setTestCaseForm({ input: '', expectedOutput: '', points: 10, isHidden: false, description: '' });
+            fetchTestCases(selectedProjectForTests);
+        } catch (err) {
+            setError('Failed to add test case');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteTestCase = async (id) => {
+        if (!window.confirm('Delete this test case?')) return;
+        try {
+            await axios.delete(`${API_BASE}/admin/testcases/${id}`);
+            setSuccess('Test case deleted');
+            fetchTestCases(selectedProjectForTests);
+        } catch (err) {
+            setError('Failed to delete test case');
+        }
+    };
+
+    const handleUpdateManualScore = async (teamId, manualScore) => {
+        try {
+            await axios.post(`${API_BASE}/admin/project-reports/${teamId}/manual-score`, { manualScore: Number(manualScore) });
+            setSuccess('Manual score updated!');
+            fetchProjectReports();
+        } catch (err) {
+            setError('Failed to update manual score');
+        }
+    };
+
+    const handleAdminRunCode = () => {
+        if (!viewCode || !viewCode.code) return;
+        if (!adminSocketRef.current) {
+            alert('Socket not connected. Please refresh.');
+            return;
+        }
+
+        setIsRunning(true);
+        adminTerminalRef.current?.clear();
+        adminTerminalRef.current?.writeln('\x1b[36mStarting administrative execution...\x1b[0m\r\n');
+
+        adminSocketRef.current.emit('run-code-start', {
+            code: viewCode.code,
+            language: viewCode.language
+        });
+
+        setTimeout(() => adminTerminalRef.current?.focus(), 100);
+    };
+
+    const handleRetestTeam = async (teamId) => {
+        if (!window.confirm('⚠️ Are you sure you want to RESET this team\'s submission?\n\nThis will DELETE their submitted code and score, moving them back to "Not Completed" status so they can submit again.')) return;
+        try {
+            setLoading(true);
+            await axios.post(`${API_BASE}/admin/project-reports/${teamId}/retest`);
+            setSuccess('Team submission reset. They can now resubmit.');
+            fetchProjectReports();
+        } catch (err) {
+            setError('Failed to reset team submission');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="animate-in container" style={{ padding: '20px 40px' }}>
             <div className="mb-10">
@@ -242,7 +412,8 @@ const AdminDashboard = () => {
                 {[
                     { id: 'projects', label: 'Projects', icon: FileCode },
                     { id: 'quizzes', label: 'Manage Quizzes', icon: ListChecks },
-                    { id: 'teams', label: 'Teams', icon: Users }
+                    { id: 'teams', label: 'Teams', icon: Users },
+                    { id: 'reports', label: 'Project Reports', icon: BarChart }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -305,6 +476,78 @@ const AdminDashboard = () => {
                                     required
                                     style={{ width: '100%', borderRadius: '12px' }}
                                 />
+                            </div>
+
+                            {/* Test Cases Section */}
+                            <div className="input-group" style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <label style={{ margin: 0 }}>Test Cases (Input/Output)</label>
+                                    <button type="button" className="btn btn-sm" onClick={() => setNewTestCases([...newTestCases, { input: '', expectedOutput: '', points: 10, isHidden: false }])}>
+                                        + Add Test Case
+                                    </button>
+                                </div>
+
+                                {newTestCases.map((tc, idx) => (
+                                    <div key={idx} style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', marginBottom: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr 0.5fr auto auto', gap: '10px', alignItems: 'end' }}>
+                                        <div>
+                                            <span style={{ fontSize: '0.7rem', color: '#666' }}>Input</span>
+                                            <textarea
+                                                rows="2"
+                                                value={tc.input}
+                                                onChange={e => {
+                                                    const updated = [...newTestCases];
+                                                    updated[idx].input = e.target.value;
+                                                    setNewTestCases(updated);
+                                                }}
+                                                placeholder="Input"
+                                                style={{ width: '100%', fontSize: '0.8rem', padding: '5px' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <span style={{ fontSize: '0.7rem', color: '#666' }}>Expected Output</span>
+                                            <textarea
+                                                rows="2"
+                                                value={tc.expectedOutput}
+                                                onChange={e => {
+                                                    const updated = [...newTestCases];
+                                                    updated[idx].expectedOutput = e.target.value;
+                                                    setNewTestCases(updated);
+                                                }}
+                                                placeholder="Output"
+                                                style={{ width: '100%', fontSize: '0.8rem', padding: '5px' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <span style={{ fontSize: '0.7rem', color: '#666' }}>Points</span>
+                                            <input
+                                                type="number"
+                                                value={tc.points}
+                                                onChange={e => {
+                                                    const updated = [...newTestCases];
+                                                    updated[idx].points = Number(e.target.value);
+                                                    setNewTestCases(updated);
+                                                }}
+                                                style={{ width: '100%', padding: '5px' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.7rem', color: '#666' }}>Hidden</span>
+                                            <input
+                                                type="checkbox"
+                                                checked={tc.isHidden}
+                                                onChange={e => {
+                                                    const updated = [...newTestCases];
+                                                    updated[idx].isHidden = e.target.checked;
+                                                    setNewTestCases(updated);
+                                                }}
+                                            />
+                                        </div>
+                                        <button type="button" className="btn btn-ghost btn-xs" style={{ color: 'var(--danger)' }} onClick={() => setNewTestCases(newTestCases.filter((_, i) => i !== idx))}>
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                                {newTestCases.length === 0 && <div style={{ fontSize: '0.8rem', color: '#999', fontStyle: 'italic' }}>No test cases added yet.</div>}
                             </div>
 
                             <div className="flex justify-end">
@@ -443,6 +686,16 @@ const AdminDashboard = () => {
             {/* --- Teams Tab --- */}
             {activeTab === 'teams' && (
                 <div className="animate-in">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 style={{ margin: 0 }}>Registered Teams</h2>
+                        <button
+                            className="btn btn-primary flex items-center gap-2"
+                            style={{ padding: '12px 24px' }}
+                            onClick={() => setShowTeamModal(true)}
+                        >
+                            <PlusCircle size={20} /> Create New Team
+                        </button>
+                    </div>
                     <div className="glass-panel">
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
@@ -627,6 +880,393 @@ const AdminDashboard = () => {
                     </div>
                 )
             })()}
+
+            {/* --- Reports Tab --- */}
+            {activeTab === 'reports' && (
+                <div className="animate-in">
+                    <div className="glass-panel" style={{ padding: '32px', marginBottom: '24px' }}>
+                        <h3 style={{ marginBottom: '20px' }}>Project Submission Reports</h3>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
+                                <tr>
+                                    <th style={{ padding: 16, textAlign: 'left' }}>Team</th>
+                                    <th style={{ padding: 16, textAlign: 'center' }}>Language</th>
+                                    <th style={{ padding: 16, textAlign: 'center' }}>Tests Passed</th>
+                                    <th style={{ padding: 16, textAlign: 'center' }}>Auto Score</th>
+                                    <th style={{ padding: 16, textAlign: 'center' }}>Manual Score</th>
+                                    <th style={{ padding: 16, textAlign: 'center' }}>Total Score</th>
+                                    <th style={{ padding: 16, textAlign: 'center' }}>Violations</th>
+                                    <th style={{ padding: 16, textAlign: 'right' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {projectReports.map(report => (
+                                    <tr key={report.teamId} style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                                        <td style={{ padding: 16 }}>
+                                            <div style={{ fontWeight: 700 }}>{report.teamName}</div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                {report.members?.join(', ')}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center' }}>
+                                            <span style={{
+                                                background: report.language === 'c' ? '#e0f2fe' : '#fef3c7',
+                                                color: report.language === 'c' ? '#0369a1' : '#92400e',
+                                                padding: '4px 12px',
+                                                borderRadius: '6px',
+                                                fontSize: '0.85rem',
+                                                fontWeight: 600
+                                            }}>
+                                                {report.language === 'c' ? 'C' : 'Python'}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center' }}>
+                                            <span style={{
+                                                color: report.passedTests === report.totalTests ? 'var(--accent)' : 'var(--warning)',
+                                                fontWeight: 700
+                                            }}>
+                                                {report.passedTests} / {report.totalTests}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center', fontWeight: 700, color: 'var(--primary)' }}>
+                                            {report.autoScore}
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center' }}>
+                                            <input
+                                                type="number"
+                                                defaultValue={report.manualScore}
+                                                onBlur={(e) => handleUpdateManualScore(report.teamId, e.target.value)}
+                                                style={{
+                                                    width: '80px',
+                                                    padding: '6px',
+                                                    textAlign: 'center',
+                                                    border: '1px solid #ddd',
+                                                    borderRadius: '6px'
+                                                }}
+                                            />
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center', fontWeight: 800, fontSize: '1.1rem', color: 'var(--accent)' }}>
+                                            {report.totalScore}
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center' }}>
+                                            <span style={{
+                                                color: report.violations > 0 ? 'var(--danger)' : 'var(--text-muted)',
+                                                fontWeight: report.violations > 0 ? 700 : 400
+                                            }}>
+                                                {report.violations}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'right' }}>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => {
+                                                    setViewCode({
+                                                        code: report.code,
+                                                        language: report.language,
+                                                        teamName: report.teamName
+                                                    });
+                                                }}
+                                                style={{ marginRight: 8, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center' }}
+                                                title="View Code & Run"
+                                            >
+                                                <Code size={14} style={{ marginRight: 4 }} /> Code
+                                            </button>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => handleRetestTeam(report.teamId)}
+                                                style={{ marginRight: 8, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center' }}
+                                                title="Reset Submission / Allow Re-submit"
+                                            >
+                                                <RotateCcw size={14} />
+                                            </button>
+
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {projectReports.length === 0 && (
+                            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                <BarChart size={40} style={{ margin: '0 auto 15px', opacity: 0.3 }} />
+                                <p>No project submissions yet.</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Test Case Management Section */}
+                    <div className="glass-panel" style={{ padding: '32px' }}>
+                        <h3 style={{ marginBottom: '20px' }}>Manage Test Cases</h3>
+
+                        <div className="input-group" style={{ marginBottom: '20px' }}>
+                            <label>Select Project</label>
+                            <select
+                                value={selectedProjectForTests}
+                                onChange={(e) => {
+                                    setSelectedProjectForTests(e.target.value);
+                                    if (e.target.value) fetchTestCases(e.target.value);
+                                }}
+                                style={{ maxWidth: '400px' }}
+                            >
+                                <option value="">-- Choose Project --</option>
+                                {projects.map(p => <option key={p._id} value={p._id}>{p.title}</option>)}
+                            </select>
+                        </div>
+
+                        {selectedProjectForTests && (
+                            <>
+                                <form onSubmit={handleAddTestCase} style={{ marginBottom: '30px', padding: '20px', background: 'rgba(0,0,0,0.02)', borderRadius: '12px' }}>
+                                    <h4 style={{ marginBottom: '15px' }}>Add New Test Case</h4>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                                        <div className="input-group">
+                                            <label>Input</label>
+                                            <textarea
+                                                rows="3"
+                                                placeholder="Test input (e.g., '5' or '10 20')"
+                                                value={testCaseForm.input}
+                                                onChange={(e) => setTestCaseForm({ ...testCaseForm, input: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="input-group">
+                                            <label>Expected Output</label>
+                                            <textarea
+                                                rows="3"
+                                                placeholder="Expected output (e.g., '120')"
+                                                value={testCaseForm.expectedOutput}
+                                                onChange={(e) => setTestCaseForm({ ...testCaseForm, expectedOutput: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '15px', marginBottom: '15px' }}>
+                                        <div className="input-group">
+                                            <label>Points</label>
+                                            <input
+                                                type="number"
+                                                value={testCaseForm.points}
+                                                onChange={(e) => setTestCaseForm({ ...testCaseForm, points: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="input-group">
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '28px' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={testCaseForm.isHidden}
+                                                    onChange={(e) => setTestCaseForm({ ...testCaseForm, isHidden: e.target.checked })}
+                                                />
+                                                Hidden Test
+                                            </label>
+                                        </div>
+                                        <div className="input-group">
+                                            <label>Description (Optional)</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g., 'Tests factorial of 5'"
+                                                value={testCaseForm.description}
+                                                onChange={(e) => setTestCaseForm({ ...testCaseForm, description: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <button type="submit" className="btn btn-primary" disabled={loading}>
+                                        {loading ? 'Adding...' : 'Add Test Case'}
+                                    </button>
+                                </form>
+
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
+                                        <tr>
+                                            <th style={{ padding: 12, textAlign: 'left' }}>Description</th>
+                                            <th style={{ padding: 12, textAlign: 'left' }}>Input</th>
+                                            <th style={{ padding: 12, textAlign: 'left' }}>Expected Output</th>
+                                            <th style={{ padding: 12, textAlign: 'center' }}>Points</th>
+                                            <th style={{ padding: 12, textAlign: 'center' }}>Hidden</th>
+                                            <th style={{ padding: 12, textAlign: 'right' }}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {testCases.map(tc => (
+                                            <tr key={tc._id} style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                                                <td style={{ padding: 12, fontSize: '0.9rem' }}>{tc.description || '-'}</td>
+                                                <td style={{ padding: 12, fontFamily: 'monospace', fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {tc.input}
+                                                </td>
+                                                <td style={{ padding: 12, fontFamily: 'monospace', fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {tc.expectedOutput}
+                                                </td>
+                                                <td style={{ padding: 12, textAlign: 'center', fontWeight: 700, color: 'var(--primary)' }}>{tc.points}</td>
+                                                <td style={{ padding: 12, textAlign: 'center' }}>
+                                                    {tc.isHidden ? <span style={{ color: 'var(--warning)' }}>🔒 Yes</span> : <span style={{ color: 'var(--text-muted)' }}>👁️ No</span>}
+                                                </td>
+                                                <td style={{ padding: 12, textAlign: 'right' }}>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        style={{ color: 'var(--danger)' }}
+                                                        onClick={() => handleDeleteTestCase(tc._id)}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {testCases.length === 0 && (
+                                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                        No test cases added yet for this project.
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* View Code Modal */}
+            {viewCode && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }} onClick={() => setViewCode(null)}>
+                    <div
+                        className="glass-panel"
+                        style={{ width: '90%', height: '90%', display: 'flex', flexDirection: 'column', background: 'white', padding: '24px' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid #eee', paddingBottom: 15 }}>
+                            <div>
+                                <h3 style={{ margin: 0 }}>Code Submission: {viewCode.teamName}</h3>
+                                <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Language:</span>
+                                    <select
+                                        value={viewCode.language}
+                                        onChange={(e) => setViewCode({ ...viewCode, language: e.target.value })}
+                                        style={{ padding: '2px 8px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '0.85rem' }}
+                                    >
+                                        <option value="c">C</option>
+                                        <option value="python">Python</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button onClick={() => setViewCode(null)} className="btn btn-ghost" style={{ fontSize: '1.2rem', padding: '4px 12px' }}>&times;</button>
+                        </div>
+
+                        {/* Content */}
+                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', minHeight: 0 }}>
+                            {/* Code Editor (Editable) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                <h4 style={{ marginBottom: '10px' }}>Source Code</h4>
+                                <textarea
+                                    value={viewCode.code || ''}
+                                    onChange={(e) => setViewCode({ ...viewCode, code: e.target.value })}
+                                    style={{ flex: 1, overflow: 'auto', background: '#1e1e1e', color: '#d4d4d4', padding: '15px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.5', resize: 'none', border: 'none' }}
+                                    spellCheck="false"
+                                    placeholder="// No code submitted. Start typing..."
+                                />
+                            </div>
+
+                            {/* Execution Panel */}
+                            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <h4 style={{ margin: 0 }}>Run Code</h4>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <button
+                                            onClick={() => adminTerminalRef.current?.clear()}
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ color: '#888' }}
+                                            title="Clear Terminal"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                        <button
+                                            onClick={handleAdminRunCode}
+                                            className="btn btn-primary"
+                                            disabled={isRunning}
+                                            style={{ padding: '6px 16px', fontSize: '0.9rem' }}
+                                        >
+                                            {isRunning ? 'Running...' : 'Run Code'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div style={{ flex: 1, background: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                                    <CodeTerminal
+                                        ref={adminTerminalRef}
+                                        onData={(data) => adminSocketRef.current?.emit('input', data)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Team Creation Modal */}
+            {showTeamModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: '20px' }} onClick={() => setShowTeamModal(false)}>
+                    <div className="glass-panel animate-in" style={{ width: '100%', maxWidth: '600px', padding: '40px', background: 'var(--bg)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 style={{ margin: 0 }}>Create New Team</h2>
+                            <button className="btn btn-ghost" onClick={() => setShowTeamModal(false)}>✕</button>
+                        </div>
+
+                        <form onSubmit={handleCreateTeam}>
+                            <div className="input-group mb-6">
+                                <label>Team Name</label>
+                                <input
+                                    type="text"
+                                    placeholder="Enter unique team name"
+                                    value={teamForm.team_name}
+                                    onChange={e => setTeamForm({ ...teamForm, team_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="input-group mb-6">
+                                <label>Team Password</label>
+                                <input
+                                    type="password"
+                                    placeholder="Set temporary password"
+                                    value={teamForm.password}
+                                    onChange={e => setTeamForm({ ...teamForm, password: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="input-group mb-8">
+                                <div className="flex justify-between items-center mb-4">
+                                    <label style={{ margin: 0 }}>Members</label>
+                                    <button type="button" className="btn btn-sm btn-ghost" style={{ color: 'var(--primary)' }} onClick={addMemberField}>
+                                        + Add Member
+                                    </button>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {teamForm.members.map((member, idx) => (
+                                        <div key={idx} className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder={`Member ${idx + 1} Name`}
+                                                value={member}
+                                                onChange={e => handleMemberChange(idx, e.target.value)}
+                                                style={{ flex: 1 }}
+                                            />
+                                            {teamForm.members.length > 1 && (
+                                                <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => removeMemberField(idx)}>✕</button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowTeamModal(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={loading}>
+                                    {loading ? 'Creating...' : 'Register Team'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

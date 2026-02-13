@@ -12,6 +12,7 @@ import ProjectWorkspace from './pages/ProjectWorkspace';
 import TeamStats from './pages/TeamStats';
 import Leaderboard from './pages/Leaderboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import Logo from './components/Logo';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -23,10 +24,10 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="glass-panel" style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, padding: '16px 40px', borderRadius: 0, borderTop: 'none', borderLeft: 'none', borderRight: 'none' }}>
-      <div className="flex justify-between items-center w-full">
-        <Link to="/" style={{ textDecoration: 'none', color: 'var(--text)', fontSize: '1.7rem', fontWeight: 800 }}>
-          Seminar<span style={{ color: 'var(--primary)' }}>Comp</span>
+    <nav className="glass-panel" style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, padding: '12px 0', borderRadius: 0, borderTop: 'none', borderLeft: 'none', borderRight: 'none' }}>
+      <div className="container flex justify-between items-center">
+        <Link to="/" style={{ textDecoration: 'none' }}>
+          <Logo size={40} />
         </Link>
         <div className="flex gap-6 items-center">
           <Link to="/leaderboard" className="btn btn-ghost gap-2"><Trophy size={18} /> Leaderboard</Link>
@@ -57,7 +58,7 @@ const Navbar = () => {
 const Footer = () => (
   <footer style={{
     marginTop: 'auto',
-    padding: '40px 40px',
+    padding: '40px 0',
     textAlign: 'center',
     borderTop: '1px solid rgba(0,0,0,0.05)',
     color: 'var(--text-muted)',

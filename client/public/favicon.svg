@@ -1,0 +1,44 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <linearGradient id="logoGradient2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Hexagon Base -->
+  <path 
+    d="M50 5L90 27.5V72.5L50 95L10 72.5V27.5L50 5Z" 
+    fill="#6366f1" 
+    fill-opacity="0.1"
+    stroke="url(#logoGradient)"
+    stroke-width="3"
+  />
+  
+  <!-- Inner Trophy Element -->
+  <path 
+    d="M35 30H65V45C65 53.2843 58.2843 60 50 60C41.7157 60 35 53.2843 35 45V30Z" 
+    stroke="url(#logoGradient)" 
+    stroke-width="5" 
+    stroke-linecap="round"
+  />
+  <path 
+    d="M50 60V75" 
+    stroke="url(#logoGradient2)" 
+    stroke-width="5" 
+    stroke-linecap="round"
+  />
+  <path 
+    d="M35 75H65" 
+    stroke="url(#logoGradient2)" 
+    stroke-width="5" 
+    stroke-linecap="round"
+  />
+  
+  <rect x="42" y="38" width="16" height="4" rx="2" fill="url(#logoGradient2)" />
+  <circle cx="50" cy="50" r="3" fill="url(#logoGradient2)" />
+</svg>

@@ -2,12 +2,14 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { exec } = require('child_process');
 const bcrypt = require('bcryptjs');
 
 const Admin = require('../models/Admin');
 const Team = require('../models/Team');
 const Question = require('../models/Question');
 const Project = require('../models/Project');
+const TestCase = require('../models/TestCase');
 const { setAuthCookie, authAdmin } = require('../utils/auth');
 
 const router = express.Router();
@@ -38,9 +40,10 @@ router.get('/admin/projects', authAdmin, async (req, res) => {
   }
 });
 
+// POST /admin/projects - Create new project
 router.post('/admin/projects', authAdmin, uploadProject.single('file'), async (req, res) => {
   try {
-    const { title, timeLimit, description } = req.body;
+    const { title, timeLimit, description, testCases } = req.body;
 
     // Either description or file is good, but let's at least expect a title
     const project = new Project({
@@ -50,6 +53,27 @@ router.post('/admin/projects', authAdmin, uploadProject.single('file'), async (r
       pdf_file: req.file ? req.file.filename : ''
     });
     await project.save();
+
+    // Create Test Cases if any
+    if (testCases) {
+      try {
+        const parsedCases = JSON.parse(testCases);
+        if (Array.isArray(parsedCases) && parsedCases.length > 0) {
+          const caseDocs = parsedCases.map(tc => ({
+            projectId: project._id,
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            points: Number(tc.points) || 10,
+            isHidden: tc.isHidden || false,
+            description: tc.description || ''
+          }));
+          await TestCase.insertMany(caseDocs);
+        }
+      } catch (e) {
+        console.error('Error parsing test cases:', e);
+      }
+    }
+
     res.status(201).json(project);
   } catch (err) {
     console.error(err);
@@ -113,6 +137,24 @@ router.get('/admin/teams/:id', authAdmin, async (req, res) => {
     if (!team) return res.status(404).json({ message: 'Team not found' });
     res.json(team);
   } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/admin/teams - Admin creates a new team
+router.post('/admin/teams', authAdmin, async (req, res) => {
+  try {
+    const { team_name, password, members } = req.body;
+    const existing = await Team.findOne({ team_name });
+    if (existing) return res.status(400).json({ message: 'Team name already taken' });
+
+    const password_hash = await bcrypt.hash(password, 10);
+    const team = new Team({ team_name, password_hash, members });
+    await team.save();
+
+    res.status(201).json(team);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -292,5 +334,214 @@ router.delete('/admin/quizzes/:id', authAdmin, async (req, res) => {
   }
 });
 
-module.exports = router;
+// --- Test Case Management Routes ---
 
+// GET /api/admin/projects/:projectId/testcases
+router.get('/admin/projects/:projectId/testcases', authAdmin, async (req, res) => {
+  try {
+    const testCases = await TestCase.find({ projectId: req.params.projectId }).sort({ createdAt: 1 });
+    res.json(testCases);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/admin/projects/:projectId/testcases
+router.post('/admin/projects/:projectId/testcases', authAdmin, async (req, res) => {
+  try {
+    const { input, expectedOutput, points, isHidden, description } = req.body;
+    const testCase = new TestCase({
+      projectId: req.params.projectId,
+      input,
+      expectedOutput,
+      points: points || 10,
+      isHidden: isHidden || false,
+      description
+    });
+    await testCase.save();
+    res.status(201).json(testCase);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE /api/admin/testcases/:id
+router.delete('/admin/testcases/:id', authAdmin, async (req, res) => {
+  try {
+    await TestCase.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Test case deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// --- Project Reports Routes ---
+
+// Helper for admin code execution
+const runCode = (code, language, input) => {
+  return new Promise((resolve, reject) => {
+    const id = Date.now() + Math.random();
+    const tempDir = path.join(__dirname, '..', 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+    const filenames = {
+      c: { source: path.join(tempDir, `admin_run_${id}.c`), exec: path.join(tempDir, `admin_run_${id}.out`) },
+      python: { source: path.join(tempDir, `admin_run_${id}.py`) }
+    };
+
+    const current = filenames[language];
+    if (!current) return reject(new Error('Unsupported language'));
+
+    try {
+      fs.writeFileSync(current.source, code);
+      let command = '';
+      const safeInput = input ? input.replace(/"/g, '\\"') : '';
+
+      // Always pipe input to prevent hangs
+      if (language === 'c') {
+        command = `gcc ${current.source} -o ${current.exec} && echo "${safeInput}" | ${current.exec}`;
+      } else {
+        command = `echo "${safeInput}" | python3 ${current.source}`;
+      }
+
+      exec(command, { timeout: 5000 }, (error, stdout, stderr) => {
+        // Cleanup
+        try {
+          if (fs.existsSync(current.source)) fs.unlinkSync(current.source);
+          if (current.exec && fs.existsSync(current.exec)) fs.unlinkSync(current.exec);
+        } catch (e) { console.error('Cleanup error', e); }
+
+        if (error) {
+          return resolve({
+            output: stderr || stdout || 'Execution Error',
+            isError: true
+          });
+        }
+        resolve({ output: stdout || '' });
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+// POST /api/admin/run-code - specific for admin dashboard testing
+router.post('/admin/run-code', authAdmin, async (req, res) => {
+  const { code, language, input } = req.body;
+  if (!code) return res.status(400).json({ output: 'No code provided' });
+
+  try {
+    const result = await runCode(code, language, input);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ output: 'Error executing code: ' + err.message });
+  }
+});
+
+// GET /api/admin/project-reports - Get all team project submissions with details
+router.get('/admin/project-reports', authAdmin, async (req, res) => {
+  try {
+    const teams = await Team.find({ 'project.submitted': true })
+      .select('team_name members project violations final_score')
+      .sort({ 'project.autoScore': -1 });
+
+    const reports = teams.map(team => ({
+      teamId: team._id,
+      teamName: team.team_name,
+      members: team.members,
+      submitted: team.project.submitted,
+      language: team.project.language,
+      code: team.project.code || '',
+      autoScore: team.project.autoScore || 0,
+      manualScore: team.project.manualScore || 0,
+      totalScore: team.project.score || 0,
+      passedTests: team.project.passedTests || 0,
+      totalTests: team.project.totalTests || 0,
+      violations: team.violations || 0,
+      finalScore: team.final_score
+    }));
+
+    res.json(reports);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /api/admin/project-reports/:teamId - Get detailed project report for a specific team
+router.get('/admin/project-reports/:teamId', authAdmin, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: 'Team not found' });
+
+    res.json({
+      teamId: team._id,
+      teamName: team.team_name,
+      members: team.members,
+      project: team.project,
+      violations: team.violations,
+      finalScore: team.final_score
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/admin/project-reports/:teamId/manual-score - Update manual score
+router.post('/admin/project-reports/:teamId/manual-score', authAdmin, async (req, res) => {
+  try {
+    const { manualScore } = req.body;
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: 'Team not found' });
+
+    team.project.manualScore = Number(manualScore) || 0;
+    team.project.score = team.project.autoScore + team.project.manualScore;
+    team.recalculateFinalScore();
+    await team.save();
+
+    res.json({ message: 'Manual score updated', project: team.project, finalScore: team.final_score });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/admin/project-reports/:teamId/retest - Reset project submission for a team (Allow them to resubmit)
+router.post('/admin/project-reports/:teamId/retest', authAdmin, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: 'Team not found' });
+
+    // Reset project submission details but keep the projectId assignment
+    const currentProjectId = team.project ? team.project.projectId : null;
+
+    team.project = {
+      submitted: false,
+      file_name: '',
+      code: '',
+      language: 'c',
+      score: 0,
+      autoScore: 0,
+      manualScore: 0,
+      testResults: [],
+      totalTests: 0,
+      passedTests: 0,
+      projectId: currentProjectId // Preserve projectId if it exists
+    };
+
+    team.recalculateFinalScore();
+    await team.save();
+
+    res.json({ message: 'Project submission reset. Team can now resubmit.' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
+});
+module.exports = router;

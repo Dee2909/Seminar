@@ -60,10 +60,13 @@ function authMiddleware(role) {
   };
 }
 
+const authAny = authMiddleware(null);
+
 module.exports = {
   setAuthCookie,
   clearAuthCookie,
   authTeam: authMiddleware('team'),
-  authAdmin: authMiddleware('admin')
+  authAdmin: authMiddleware('admin'),
+  authAny
 };
 

@@ -20,7 +20,7 @@ const FeatureCard = ({ icon: Icon, title, desc }) => (
 const Home = () => {
     return (
         <div className="animate-in w-full">
-            <section style={{ textAlign: 'center', padding: '120px 20px', background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.05) 0%, transparent 70%)' }}>
+            <section style={{ textAlign: 'center', padding: '150px 60px', background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.08) 0%, transparent 75%)' }}>
                 <motion.h1
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}

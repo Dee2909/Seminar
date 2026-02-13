@@ -17,29 +17,10 @@ export const AuthProvider = ({ children }) => {
 
     const checkToken = async () => {
         try {
-            // Try team check (silently - don't log expected errors)
-            const res = await axios.get(`${API_BASE}/team/me`, {
-                validateStatus: (status) => status === 200 || status === 401 || status === 403
-            });
-            if (res.status === 200) {
-                setUser({ ...res.data, role: 'team' });
-            } else {
-                throw new Error('Not team');
-            }
+            const res = await axios.get(`${API_BASE}/me`);
+            setUser(res.data);
         } catch (err) {
-            try {
-                // Try admin check (silently)
-                const resAdmin = await axios.get(`${API_BASE}/admin/me`, {
-                    validateStatus: (status) => status === 200 || status === 401 || status === 403
-                });
-                if (resAdmin.status === 200) {
-                    setUser({ ...resAdmin.data, role: 'admin' });
-                } else {
-                    setUser(null);
-                }
-            } catch (err2) {
-                setUser(null);
-            }
+            setUser(null);
         } finally {
             setLoading(false);
         }
