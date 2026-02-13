@@ -27,3 +27,8 @@ export const getQuestions = async (quizId) => {
   return res.data;
 };
 
+export const updateQuiz = async (quizId, data) => {
+  const res = await api.put(`/admin/quizzes/${quizId}`, data);
+  return res.data;
+};
+

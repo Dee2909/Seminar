@@ -6,7 +6,7 @@ import {
     Users, FileCode, PlusCircle, CheckCircle,
     ListChecks, Layers, Clock, ListOrdered, CheckCircle2, BarChart, Code, TestTube, RotateCcw, Trash2
 } from 'lucide-react';
-import { getQuizzes, addQuestion as addQuestionSvc, createQuiz as createQuizSvc } from '../services/quizService';
+import { getQuizzes, addQuestion as addQuestionSvc, createQuiz as createQuizSvc, updateQuiz as updateQuizSvc } from '../services/quizService';
 import CodeTerminal from '../components/CodeTerminal';
 import { io } from 'socket.io-client';
 import { useRef } from 'react';
@@ -19,6 +19,8 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [editingQuizId, setEditingQuizId] = useState(null);
+    const [editForm, setEditForm] = useState({ title: '', totalQuestions: 0, questionBankSize: 0, timeLimit: 0 });
 
     // --- State for New Quiz ---
     const [quizForm, setQuizForm] = useState({
@@ -245,6 +247,32 @@ const AdminDashboard = () => {
             loadQuizzes();
         } catch (err) {
             setError('Failed to delete quiz.');
+        }
+    };
+
+    const handleEditQuiz = (quiz) => {
+        setEditingQuizId(quiz._id);
+        setEditForm({
+            title: quiz.title,
+            totalQuestions: quiz.totalQuestions,
+            questionBankSize: quiz.questionBankSize,
+            timeLimit: quiz.timeLimit
+        });
+    };
+
+    const handleUpdateQuiz = async (e) => {
+        e.preventDefault();
+        setError(''); setSuccess('');
+        try {
+            setLoading(true);
+            await updateQuizSvc(editingQuizId, editForm);
+            setSuccess('Quiz updated successfully!');
+            setEditingQuizId(null);
+            loadQuizzes();
+        } catch (err) {
+            setError('Failed to update quiz.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -658,10 +686,44 @@ const AdminDashboard = () => {
                             <tbody>
                                 {quizzes.map(q => (
                                     <tr key={q._id} style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                                        <td style={{ padding: 16, fontWeight: 600 }}>{q.title}</td>
-                                        <td style={{ padding: 16, textAlign: 'center' }}>{q.questionBankSize}</td>
+                                        <td style={{ padding: 16, fontWeight: 600 }}>
+                                            {editingQuizId === q._id ? (
+                                                <input
+                                                    type="text"
+                                                    value={editForm.title}
+                                                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                                    className="input-sm"
+                                                    style={{ width: '100%', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--primary)' }}
+                                                />
+                                            ) : (
+                                                q.title
+                                            )}
+                                        </td>
+                                        <td style={{ padding: 16, textAlign: 'center' }}>
+                                            {editingQuizId === q._id ? (
+                                                <input
+                                                    type="number"
+                                                    value={editForm.questionBankSize}
+                                                    onChange={(e) => setEditForm({ ...editForm, questionBankSize: Number(e.target.value) })}
+                                                    style={{ width: '60px', textAlign: 'center' }}
+                                                />
+                                            ) : (
+                                                q.questionBankSize
+                                            )}
+                                        </td>
                                         <td style={{ padding: 16, textAlign: 'center' }}>{q.uploadedQuestions}</td>
-                                        <td style={{ padding: 16, textAlign: 'center' }}>{q.timeLimit}m</td>
+                                        <td style={{ padding: 16, textAlign: 'center' }}>
+                                            {editingQuizId === q._id ? (
+                                                <input
+                                                    type="number"
+                                                    value={editForm.timeLimit}
+                                                    onChange={(e) => setEditForm({ ...editForm, timeLimit: Number(e.target.value) })}
+                                                    style={{ width: '60px', textAlign: 'center' }}
+                                                />
+                                            ) : (
+                                                `${q.timeLimit}m`
+                                            )}
+                                        </td>
                                         <td style={{ padding: 16 }}>
                                             <span style={{ color: q.isSufficient ? 'var(--accent)' : 'var(--warning)', fontSize: '0.85rem' }}>
                                                 {q.isSufficient ? '✓ Sufficient' : `⚠ Needs ${q.questionBankSize - q.uploadedQuestions} more`}
@@ -669,8 +731,18 @@ const AdminDashboard = () => {
                                         </td>
                                         <td style={{ padding: 16, textAlign: 'right' }}>
                                             <div className="flex justify-end gap-2">
-                                                <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedQuizId(q._id); setActiveTab('add-questions'); }}>Add Questions</button>
-                                                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleDeleteQuiz(q._id)}>Remove</button>
+                                                {editingQuizId === q._id ? (
+                                                    <>
+                                                        <button className="btn btn-primary btn-sm" onClick={handleUpdateQuiz}>Save</button>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => setEditingQuizId(null)}>Cancel</button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleEditQuiz(q)}>Edit</button>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedQuizId(q._id); setActiveTab('add-questions'); }}>Add Questions</button>
+                                                        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleDeleteQuiz(q._id)}>Remove</button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
