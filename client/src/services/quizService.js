@@ -32,3 +32,13 @@ export const updateQuiz = async (quizId, data) => {
   return res.data;
 };
 
+export const updateQuestion = async (questionId, data) => {
+  const res = await api.put(`/admin/questions/${questionId}`, data);
+  return res.data;
+};
+
+export const deleteQuestion = async (questionId) => {
+  const res = await api.delete(`/admin/questions/${questionId}`);
+  return res.data;
+};
+

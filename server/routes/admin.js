@@ -351,6 +351,34 @@ router.put('/admin/quizzes/:id', authAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/admin/questions/:id
+router.put('/admin/questions/:id', authAdmin, async (req, res) => {
+  try {
+    const { question, options, correct_answer } = req.body;
+    const q = await Question.findByIdAndUpdate(
+      req.params.id,
+      { question, options, correct_answer },
+      { new: true }
+    );
+    if (!q) return res.status(404).json({ message: 'Question not found' });
+    res.json({ message: 'Question updated', question: q });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE /api/admin/questions/:id
+router.delete('/admin/questions/:id', authAdmin, async (req, res) => {
+  try {
+    await Question.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Question deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // --- Test Case Management Routes ---
 
 // GET /api/admin/projects/:projectId/testcases

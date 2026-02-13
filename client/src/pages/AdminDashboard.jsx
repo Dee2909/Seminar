@@ -6,7 +6,7 @@ import {
     Users, FileCode, PlusCircle, CheckCircle,
     ListChecks, Layers, Clock, ListOrdered, CheckCircle2, BarChart, Code, TestTube, RotateCcw, Trash2
 } from 'lucide-react';
-import { getQuizzes, addQuestion as addQuestionSvc, createQuiz as createQuizSvc, updateQuiz as updateQuizSvc } from '../services/quizService';
+import { getQuizzes, addQuestion as addQuestionSvc, createQuiz as createQuizSvc, updateQuiz as updateQuizSvc, getQuestions as getQuestionsSvc, updateQuestion as updateQuestionSvc, deleteQuestion as deleteQuestionSvc } from '../services/quizService';
 import CodeTerminal from '../components/CodeTerminal';
 import { io } from 'socket.io-client';
 import { useRef } from 'react';
@@ -21,6 +21,14 @@ const AdminDashboard = () => {
     const [success, setSuccess] = useState('');
     const [editingQuizId, setEditingQuizId] = useState(null);
     const [editForm, setEditForm] = useState({ title: '', totalQuestions: 0, questionBankSize: 0, timeLimit: 0 });
+    const [viewingQuizId, setViewingQuizId] = useState(null);
+    const [questions, setQuestions] = useState([]);
+    const [editingQuestionId, setEditingQuestionId] = useState(null);
+    const [questionEditForm, setQuestionEditForm] = useState({
+        question: '',
+        options: { A: '', B: '', C: '', D: '' },
+        correct_answer: 'A'
+    });
 
     // --- State for New Quiz ---
     const [quizForm, setQuizForm] = useState({
@@ -273,6 +281,60 @@ const AdminDashboard = () => {
             setError('Failed to update quiz.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleViewQuestions = async (quizId) => {
+        try {
+            setLoading(true);
+            setError(''); setSuccess('');
+            const data = await getQuestionsSvc(quizId);
+            setQuestions(data);
+            setViewingQuizId(quizId);
+            setActiveTab('view-questions');
+        } catch (err) {
+            setError('Failed to load questions.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEditQuestion = (q) => {
+        setEditingQuestionId(q._id);
+        setQuestionEditForm({
+            question: q.question,
+            options: { ...q.options },
+            correct_answer: q.correct_answer
+        });
+    };
+
+    const handleUpdateQuestion = async (e) => {
+        e.preventDefault();
+        setError(''); setSuccess('');
+        try {
+            setLoading(true);
+            await updateQuestionSvc(editingQuestionId, questionEditForm);
+            setSuccess('Question updated!');
+            setEditingQuestionId(null);
+            const data = await getQuestionsSvc(viewingQuizId);
+            setQuestions(data);
+        } catch (err) {
+            setError('Failed to update question.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteQuestion = async (id) => {
+        if (!window.confirm('Delete this question?')) return;
+        setError(''); setSuccess('');
+        try {
+            await deleteQuestionSvc(id);
+            setSuccess('Question deleted!');
+            const data = await getQuestionsSvc(viewingQuizId);
+            setQuestions(data);
+        } catch (err) {
+            setError('Failed to delete question.');
         }
     };
 
@@ -739,6 +801,7 @@ const AdminDashboard = () => {
                                                 ) : (
                                                     <>
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEditQuiz(q)}>Edit</button>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleViewQuestions(q._id)}>View Questions</button>
                                                         <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedQuizId(q._id); setActiveTab('add-questions'); }}>Add Questions</button>
                                                         <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleDeleteQuiz(q._id)}>Remove</button>
                                                     </>
@@ -952,6 +1015,106 @@ const AdminDashboard = () => {
                     </div>
                 )
             })()}
+
+            {activeTab === 'view-questions' && (
+                <div className="animate-in">
+                    <div className="flex items-center gap-4 mb-6">
+                        <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('quizzes')}>← Back to Quizzes</button>
+                        <h2 style={{ margin: 0 }}>Questions for {quizzes.find(q => q._id === viewingQuizId)?.title}</h2>
+                    </div>
+
+                    <div className="grid gap-6">
+                        {questions.map((q, idx) => (
+                            <div key={q._id} className="glass-panel" style={{ padding: 24 }}>
+                                {editingQuestionId === q._id ? (
+                                    <form onSubmit={handleUpdateQuestion} className="grid gap-4">
+                                        <div className="input-group">
+                                            <label>Question Text</label>
+                                            <textarea
+                                                className="w-full"
+                                                value={questionEditForm.question}
+                                                onChange={(e) => setQuestionEditForm({ ...questionEditForm, question: e.target.value })}
+                                                rows="3"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {['A', 'B', 'C', 'D'].map(opt => (
+                                                <div key={opt} className="input-group">
+                                                    <label>Option {opt}</label>
+                                                    <input
+                                                        type="text"
+                                                        value={questionEditForm.options[opt]}
+                                                        onChange={(e) => {
+                                                            const newOpts = { ...questionEditForm.options, [opt]: e.target.value };
+                                                            setQuestionEditForm({ ...questionEditForm, options: newOpts });
+                                                        }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="input-group w-full">
+                                            <label>Correct Answer</label>
+                                            <select
+                                                className="w-full"
+                                                value={questionEditForm.correct_answer}
+                                                onChange={(e) => setQuestionEditForm({ ...questionEditForm, correct_answer: e.target.value })}
+                                            >
+                                                <option value="A">A</option>
+                                                <option value="B">B</option>
+                                                <option value="C">C</option>
+                                                <option value="D">D</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button type="submit" className="btn btn-primary">Save Changes</button>
+                                            <button type="button" className="btn btn-ghost" onClick={() => setEditingQuestionId(null)}>Cancel</button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <>
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary)', background: 'rgba(0,0,0,0.05)', padding: '4px 8px', borderRadius: 4, marginRight: 10 }}>
+                                                    QUESTION {idx + 1}
+                                                </span>
+                                                <h4 style={{ display: 'inline', margin: 0 }}>{q.question}</h4>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button className="btn btn-ghost btn-sm" onClick={() => handleEditQuestion(q)}>Edit</button>
+                                                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleDeleteQuestion(q._id)}>Delete</button>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                                            {Object.entries(q.options).map(([key, val]) => (
+                                                <div key={key} style={{
+                                                    padding: '12px 16px',
+                                                    borderRadius: 12,
+                                                    background: q.correct_answer === key ? 'rgba(34,197,94,0.08)' : 'rgba(0,0,0,0.02)',
+                                                    border: q.correct_answer === key ? '1px solid #22c55e' : '1px solid rgba(0,0,0,0.05)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 12
+                                                }}>
+                                                    <span style={{
+                                                        width: 28, height: 28, borderRadius: '50%', background: q.correct_answer === key ? '#22c55e' : 'rgba(0,0,0,0.1)',
+                                                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800
+                                                    }}>{key}</span>
+                                                    <span style={{ fontWeight: q.correct_answer === key ? 600 : 400 }}>{val}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                        {questions.length === 0 && (
+                            <div className="glass-panel" style={{ padding: 60, textAlign: 'center', opacity: 0.5 }}>
+                                No questions found for this quiz.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* --- Reports Tab --- */}
             {activeTab === 'reports' && (
