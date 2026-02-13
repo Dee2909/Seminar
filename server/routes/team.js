@@ -76,10 +76,12 @@ router.get('/team/project-config', authTeam, async (req, res) => {
 });
 
 // --- File upload setup ---
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+const uploadsDir = path.resolve(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  console.log('📁 Creating uploads directory (routes):', uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
+console.log('✅ Multer configured to save in:', uploadsDir);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -320,6 +322,9 @@ router.post('/team/upload', authTeam, upload.fields([{ name: 'file', maxCount: 1
     if (req.body.violations) {
       team.violations = (team.violations || 0) + Number(req.body.violations);
     }
+
+    console.log(`⬆️ Project submitted by team ${team.team_name}:`, sourceFile.filename);
+    if (recordingFile) console.log('📹 Recording file saved:', recordingFile.filename);
 
     team.recalculateFinalScore();
     await team.save();

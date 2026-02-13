@@ -25,9 +25,28 @@ app.use(cookieParser());
 app.use(morgan('dev'));
 
 // Static files
-const uploadsDir = path.join(__dirname, 'server', 'uploads');
-const clientBuildPath = path.join(__dirname, 'server', 'built');
-app.use('/uploads', express.static(uploadsDir));
+const uploadsDir = path.resolve(__dirname, 'server', 'uploads');
+const clientBuildPath = path.resolve(__dirname, 'server', 'built');
+
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  console.log('📁 Creating uploads directory at:', uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+console.log('📂 Serving uploads from:', uploadsDir);
+console.log('🌐 Serving client from:', clientBuildPath);
+
+app.use('/uploads', (req, res, next) => {
+  const filePath = path.join(uploadsDir, req.path);
+  console.log(`🔍 Request for upload: ${req.path} -> Checking: ${filePath}`);
+  if (fs.existsSync(filePath)) {
+    console.log('✅ File found on disk');
+  } else {
+    console.log('❌ File NOT found on disk');
+  }
+  next();
+}, express.static(uploadsDir));
 app.use(express.static(clientBuildPath));
 
 // --- API Routes ---
